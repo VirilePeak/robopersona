@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Format
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --workspace --exclude botpack-python --all-targets -- -D warnings
+      - name: Tests
+        run: cargo test --workspace --exclude botpack-python
+
+  wasm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - name: Build affect engine (no_std proof)
+        run: cargo build -p botpack-affect --target wasm32-unknown-unknown --release
+      - name: Build wasm bindings
+        run: cargo build -p botpack-wasm --target wasm32-unknown-unknown --release
+
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Build wheel + functional test
+        run: |
+          pip install maturin
+          maturin build -m crates/botpack-python/Cargo.toml -o dist
+          pip install dist/*.whl
+          python -c "
+          import botpack, struct
+          e = botpack.AffectEngine(botpack.AffectConfig(botpack.AffectVector(0.1,0.2,0.0), 0.5, 60.0, 0.3))
+          e.apply_stimulus(botpack.AffectVector(0.9,-0.3,0.6))
+          for _ in range(10): e.tick(1.7)
+          s = e.state().as_tuple()
+          expected = (0.1000610405107032, 0.19993895948929682, 6.104051070319337e-5)
+          assert struct.pack('3d', *s) == struct.pack('3d', *expected), s
+          print('PYTHON DETERMINISM OK:', s)
+          "
+
+  cli:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: CLI end-to-end
+        run: |
+          cargo build -p botpack-cli
+          mkdir -p /tmp/bp-src
+          cat > /tmp/bp-src/manifest.json <<'EOF'
+          {"format_version":"0.1.0","name":"atlas-caretaker","version":"0.1.0","persona":{"display_name":"Atlas Caretaker","languages":["en"]}}
+          EOF
+          echo "hello" > /tmp/bp-src/greeting.txt
+          target/debug/botpack pack /tmp/bp-src -o /tmp/t.botpack
+          target/debug/botpack verify /tmp/t.botpack
+          target/debug/botpack unpack /tmp/t.botpack -o /tmp/bp-out
+          diff -r --exclude=manifest.json /tmp/bp-src /tmp/bp-out
+          echo "CLI E2E OK"
