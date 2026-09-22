@@ -64,8 +64,9 @@ is enforced by and tested against this reference implementation.
 
 ## Status
 
-v0.1.0 — draft spec, reference implementation, 33 tests green,
-clippy-clean, wasm32 + Python + Node verified.
+Crate 0.1.1 — format spec still 0.1.0 (draft), reference implementation,
+33 tests green, clippy-clean, wasm32 + Python + Node verified. Crates are
+not published to crates.io yet.
 
 ## License
 

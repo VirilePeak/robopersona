@@ -14,8 +14,8 @@ name = "botpack"
 path = "src/main.rs"
 
 [dependencies]
-botpack-core = { version = "0.1.0", path = "../botpack-core" }
-botpack-archive = { version = "0.1.0", path = "../botpack-archive" }
+botpack-core = { version = "0.1.1", path = "../botpack-core" }
+botpack-archive = { version = "0.1.1", path = "../botpack-archive" }
 serde_json.workspace = true
 semver.workspace = true
 clap = { version = "4", features = ["derive"] }

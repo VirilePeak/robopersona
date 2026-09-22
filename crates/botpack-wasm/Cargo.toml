@@ -13,7 +13,7 @@ categories = ["science::robotics", "wasm"]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-botpack-affect = { version = "0.1.0", path = "../botpack-affect" }
+botpack-affect = { version = "0.1.1", path = "../botpack-affect" }
 wasm-bindgen = "0.2"
 serde-wasm-bindgen = "0.6"
 

@@ -11,5 +11,5 @@ name = "botpack"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-botpack-affect = { version = "0.1.0", path = "../botpack-affect" }
+botpack-affect = { version = "0.1.1", path = "../botpack-affect" }
 pyo3 = { version = "0.23", features = ["extension-module"] }
