@@ -98,17 +98,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${GITHUB_REF_NAME}"
-          cat > notes.md <<'EOF'
-          ## .botpack __TAG__ — reference implementation
-
-          - botpack-x86_64-unknown-linux-gnu — CLI (pack / unpack / verify / show), glibc build.
-          - botpack-wasm.tar.gz — browser wasm bindings; JS entry point inside the tarball is wasm/botpack_wasm_opt.js.
-          - SHA256SUMS — checksums for the above.
-
-          Crates are **not** published to crates.io yet. Spec: [SPEC.md](https://github.com/VirilePeak/robopersona/blob/main/SPEC.md).
-          EOF
-          notes="$(cat notes.md)"
-          printf '%s\n' "${notes//__TAG__/${TAG}}" > notes.md
+          {
+            echo "## .botpack ${TAG} — reference implementation"
+            echo
+            echo "- botpack-x86_64-unknown-linux-gnu — CLI (pack / unpack / verify / show), glibc build."
+            echo "- botpack-wasm.tar.gz — browser wasm bindings; JS entry point inside the tarball is wasm/botpack_wasm_opt.js."
+            echo "- SHA256SUMS — checksums for the above."
+            echo
+            echo "Crates are **not** published to crates.io yet. Spec: [SPEC.md](https://github.com/VirilePeak/robopersona/blob/main/SPEC.md)."
+          } > notes.md
           gh release create "${TAG}" \
             --verify-tag \
             --title "botpack ${TAG}" \
