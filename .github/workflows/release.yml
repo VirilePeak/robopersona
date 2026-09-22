@@ -11,37 +11,93 @@ env:
   CARGO_TERM_COLOR: always
 
 permissions:
-  contents: write
+  contents: read
+  # actions: write is required by upload/download-artifact (Artifact API).
+  # Job-level permissions REPLACE the workflow set — they do not inherit.
   actions: write
 
 jobs:
-  release:
+  gate:
     # Pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19.
+    # A tag does not re-trigger CI (CI runs on push to main only), so the
+    # release pipeline re-runs the full gate before shipping anything.
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-
-      # A tag does not re-trigger CI (CI runs on push to main only), so the
-      # release job re-runs the full gate before shipping anything.
       - name: Gate (fmt, clippy, tests)
         run: |
           cargo fmt --all -- --check
           cargo clippy --workspace --exclude botpack-python --all-targets --locked -- -D warnings
           cargo test --workspace --exclude botpack-python --locked
 
-      # --- CLI binary (glibc; no musl cross — zstd-sys makes it risky) ---
-      - name: Build CLI
-        run: cargo build -p botpack --release --locked
+  cli:
+    needs: gate
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            triple: x86_64-unknown-linux-gnu
+          - os: macos-14
+            triple: aarch64-apple-darwin
+        # No arm64-linux leg yet: the `ubuntu-24.04-arm` label is not
+        # confirmed, and a missing/hanging runner would block `publish`
+        # (needs: [cli, wasm]) — including the macOS artifacts. Add it as a
+        # separate follow-up once the label is verified.
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.triple }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build CLI (${{ matrix.triple }})
+        run: cargo build -p botpack --release --locked --target ${{ matrix.triple }}
+      - name: Smoke test (native build, host triple)
+        run: |
+          set -e
+          BIN="target/${{ matrix.triple }}/release/botpack"
+          rm -rf /tmp/bp-src /tmp/bp-out /tmp/t.botpack
+          mkdir -p /tmp/bp-src
+          # Compact JSON, no trailing newline — byte preservation is part of
+          # the contract (SPEC §3.4).
+          printf '%s' '{"format_version":"0.1.0","name":"atlas-caretaker","version":"0.1.0","persona":{"display_name":"Atlas Caretaker","languages":["en"]}}' > /tmp/bp-src/manifest.json
+          echo payload > /tmp/bp-src/a.txt
+          "$BIN" pack /tmp/bp-src -o /tmp/t.botpack
+          "$BIN" verify /tmp/t.botpack
+          "$BIN" unpack /tmp/t.botpack -o /tmp/bp-out
+          diff -r /tmp/bp-src /tmp/bp-out
+          cmp /tmp/bp-src/manifest.json /tmp/bp-out/manifest.json
+          echo "SMOKE OK (${{ matrix.triple }})"
+      - name: Stage
+        run: |
+          mkdir -p stage
+          cp "target/${{ matrix.triple }}/release/botpack" "stage/botpack-${{ matrix.triple }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.triple }}
+          path: stage/
+
+  wasm:
+    needs: gate
+    # Pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
 
       # --- wasm toolchain, pinned to Cargo.lock versions ---
       # Extract dirs are discovered, not assumed: tarball roots have changed
-      # between releases before.
+      # between releases before. These x86_64 tarballs must NOT be moved to
+      # macOS or arm runners.
       - name: Install wasm-opt (Binaryen 133)
         run: |
           set -e
@@ -76,39 +132,84 @@ jobs:
       - name: Build wasm artifact
         run: sh ./scripts/build-wasm.sh dist/wasm
 
-      - name: Stage artifacts
+      - name: Stage
         run: |
           mkdir -p stage
-          cp target/release/botpack stage/botpack-x86_64-unknown-linux-gnu
           tar czf stage/botpack-wasm.tar.gz -C dist wasm
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wasm-artifact
+          path: stage/
+
+  publish:
+    needs: [cli, wasm]
+    runs-on: ubuntu-24.04
+    permissions:
+      # Job-level override: this set REPLACES the workflow-level set.
+      # actions: write for upload/download-artifact; contents: write for
+      # `gh release create` (write covers read).
+      contents: write
+      actions: write
+    steps:
+      # merge-multiple: flatten all job artifacts into one directory —
+      # otherwise `gh release create stage/*` would upload directories.
+      # Explicit patterns instead of "*": a re-run would otherwise also pull
+      # the combined `release-artifacts` artifact and poison the checksum step.
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "cli-*"
+          merge-multiple: true
+          path: stage/
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: "wasm-artifact"
+          merge-multiple: true
+          path: stage/
+
+      - name: Checksums (single SHA256SUMS over all files)
+        run: |
           cd stage
-          sha256sum botpack-x86_64-unknown-linux-gnu botpack-wasm.tar.gz > SHA256SUMS
+          sha256sum botpack-* > SHA256SUMS
+          cat SHA256SUMS
           ls -la
 
-      - name: Upload artifacts
+      - name: Upload combined artifact (dry-run inspectable)
         uses: actions/upload-artifact@v4
         with:
           name: release-artifacts
           path: stage/
+
+      # Notes are built unconditionally so a dispatch dry-run exercises and
+      # prints them; only the release creation itself is tag-gated.
+      - name: Build release notes
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          {
+            echo "## .botpack ${TAG} — reference implementation"
+            echo
+            echo "CLI binaries (native builds, no cross-compile):"
+            echo
+            while IFS= read -r f; do
+              echo "- \`$(basename "$f")\`"
+            done < <(ls stage/botpack-* | grep -v wasm.tar.gz)
+            echo "- \`botpack-wasm.tar.gz\` — browser wasm bindings; JS entry point inside the tarball is \`wasm/botpack_wasm_opt.js\`."
+            echo "- \`SHA256SUMS\` — checksums for the above."
+            echo
+            echo "Crates are **not** published to crates.io yet. Spec: [SPEC.md](https://github.com/VirilePeak/robopersona/blob/main/SPEC.md)."
+          } > notes.md
+          cat notes.md
 
       # --- GitHub Release only for real v* tags, never for dispatch ---
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_HOST: github.com
         run: |
-          TAG="${GITHUB_REF_NAME}"
-          {
-            echo "## .botpack ${TAG} — reference implementation"
-            echo
-            echo "- botpack-x86_64-unknown-linux-gnu — CLI (pack / unpack / verify / show), glibc build."
-            echo "- botpack-wasm.tar.gz — browser wasm bindings; JS entry point inside the tarball is wasm/botpack_wasm_opt.js."
-            echo "- SHA256SUMS — checksums for the above."
-            echo
-            echo "Crates are **not** published to crates.io yet. Spec: [SPEC.md](https://github.com/VirilePeak/robopersona/blob/main/SPEC.md)."
-          } > notes.md
-          gh release create "${TAG}" \
+          gh release create "${GITHUB_REF_NAME}" \
             --verify-tag \
-            --title "botpack ${TAG}" \
+            --title "botpack ${GITHUB_REF_NAME}" \
             --notes-file notes.md \
             stage/*
