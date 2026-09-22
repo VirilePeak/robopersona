@@ -1,0 +1,6 @@
+/target
+.venv
+crates/botpack-wasm/tests/node/pkg
+__pycache__/
+*.pyc
+.DS_Store

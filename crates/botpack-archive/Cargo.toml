@@ -1,0 +1,20 @@
+[package]
+name = "botpack-archive"
+description = "Archive format for .botpack behavior packages (tar+zstd, SHA-256 integrity)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+botpack-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+hex.workspace = true
+tar = "0.4"
+zstd = "0.13"
+
+[dev-dependencies]
+tempfile = "3"
+semver.workspace = true

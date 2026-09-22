@@ -1,0 +1,17 @@
+[package]
+name = "botpack-cli"
+description = "CLI for the .botpack format: pack, unpack, verify"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "botpack"
+path = "src/main.rs"
+
+[dependencies]
+botpack-core = { path = "../botpack-core" }
+botpack-archive = { path = "../botpack-archive" }
+serde_json.workspace = true
+semver.workspace = true
+clap = { version = "4", features = ["derive"] }

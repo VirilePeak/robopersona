@@ -1,0 +1,14 @@
+[package]
+name = "botpack-affect"
+description = "Deterministic affect engine for robot personas (PAD model, ODE decay, no_std)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"], default-features = false }
+thiserror = { version = "2", default-features = false }
+libm = "0.2"
+
+[dev-dependencies]
+serde_json.workspace = true
