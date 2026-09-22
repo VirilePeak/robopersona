@@ -1,0 +1,116 @@
+name: Release
+
+# Tag-triggered only: pushing the workflow itself must not create a release.
+# workflow_dispatch exists for dry-run verification of the pipeline.
+on:
+  push:
+    tags: ["v[0-9]*"]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  release:
+    # Pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+
+      # A tag does not re-trigger CI (CI runs on push to main only), so the
+      # release job re-runs the full gate before shipping anything.
+      - name: Gate (fmt, clippy, tests)
+        run: |
+          cargo fmt --all -- --check
+          cargo clippy --workspace --exclude botpack-python --all-targets --locked -- -D warnings
+          cargo test --workspace --exclude botpack-python --locked
+
+      # --- CLI binary (glibc; no musl cross — zstd-sys makes it risky) ---
+      - name: Build CLI
+        run: cargo build -p botpack --release --locked
+
+      # --- wasm toolchain, pinned to Cargo.lock versions ---
+      # Extract dirs are discovered, not assumed: tarball roots have changed
+      # between releases before.
+      - name: Install wasm-opt (Binaryen 133)
+        run: |
+          set -e
+          curl -fsSL -o binaryen.tar.gz \
+            https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+          echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  binaryen.tar.gz" | sha256sum -c -
+          mkdir binen && tar xzf binaryen.tar.gz -C binen
+          OPT="$(find binen -type f -name wasm-opt -print -quit)"
+          test -x "$OPT" || { echo "wasm-opt not found in binaryen tarball"; exit 1; }
+          echo "wasm-opt: $OPT"
+          echo "$(dirname "$OPT")" >> "$GITHUB_PATH"
+
+      - name: Install wasm-bindgen CLI 0.2.128
+        # Must match the wasm-bindgen crate version in Cargo.lock; keep them in sync.
+        run: |
+          set -e
+          curl -fsSL -o wasm-bindgen.tar.gz \
+            https://github.com/rustwasm/wasm-bindgen/releases/download/0.2.128/wasm-bindgen-0.2.128-x86_64-unknown-linux-musl.tar.gz
+          echo "b51f0208fdff83515a787bd8ab9ac5865ed84dabb66d0c709957bb59793c645f  wasm-bindgen.tar.gz" | sha256sum -c -
+          mkdir wbg && tar xzf wasm-bindgen.tar.gz -C wbg
+          WBG="$(find wbg -type f -name wasm-bindgen -print -quit)"
+          test -x "$WBG" || { echo "wasm-bindgen not found in tarball"; exit 1; }
+          echo "wasm-bindgen: $WBG"
+          echo "$(dirname "$WBG")" >> "$GITHUB_PATH"
+
+      - name: Tool versions
+        run: |
+          wasm-opt --version
+          wasm-bindgen --version
+
+      # --- wasm artifact (script expects both tools on PATH, writes dist/wasm) ---
+      - name: Build wasm artifact
+        run: sh ./scripts/build-wasm.sh dist/wasm
+
+      - name: Stage artifacts
+        run: |
+          mkdir -p stage
+          cp target/release/botpack stage/botpack-x86_64-unknown-linux-gnu
+          tar czf stage/botpack-wasm.tar.gz -C dist wasm
+          cd stage
+          sha256sum botpack-x86_64-unknown-linux-gnu botpack-wasm.tar.gz > SHA256SUMS
+          ls -la
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: stage/
+
+      # --- GitHub Release only for real v* tags, never for dispatch ---
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          cat > notes.md <<'EOF'
+          ## .botpack __TAG__ — reference implementation
+
+          - botpack-x86_64-unknown-linux-gnu — CLI (pack / unpack / verify / show), glibc build.
+          - botpack-wasm.tar.gz — browser wasm bindings; JS entry point inside the tarball is wasm/botpack_wasm_opt.js.
+          - SHA256SUMS — checksums for the above.
+
+          Crates are **not** published to crates.io yet. Spec: [SPEC.md](https://github.com/VirilePeak/robopersona/blob/main/SPEC.md).
+          EOF
+          notes="$(cat notes.md)"
+          printf '%s\n' "${notes//__TAG__/${TAG}}" > notes.md
+          gh release create "${TAG}" \
+            --verify-tag \
+            --title "botpack ${TAG}" \
+            --notes-file notes.md \
+            stage/*

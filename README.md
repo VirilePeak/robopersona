@@ -64,7 +64,7 @@ is enforced by and tested against this reference implementation.
 
 ## Status
 
-v0.1.0 — draft spec, reference implementation, 31 tests green,
+v0.1.0 — draft spec, reference implementation, 33 tests green,
 clippy-clean, wasm32 + Python + Node verified.
 
 ## License

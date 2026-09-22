@@ -77,6 +77,22 @@ A valid name:
 Readers MUST ignore unknown fields (top-level and nested). Writers MUST NOT
 fail on round-tripping manifests that carry unknown fields.
 
+### 3.4 Byte preservation on ingest
+
+When a `manifest.json` is ingested from a file or stream (e.g. by a `pack`
+tool), writers MUST embed the ingested bytes verbatim as the `manifest.json`
+entry — after parsing and validating them against §3 — instead of
+re-serializing the parsed structure. Re-serialization MAY drop unknown
+fields (§3.3) and is therefore not round-trip stable; the embedded bytes
+are the source of truth. Readers MUST expose the stored bytes as read.
+
+This rule applies only to `manifest.json`. `checksums.json` is always
+writer-generated (§4) and has no ingest path.
+
+*Reference note (non-normative):* the reference CLI's `show` command prints
+the stored bytes exactly, with no added trailing newline, so
+`botpack show f.botpack > manifest.json` is a valid `pack` input.
+
 ## 4. Integrity (`checksums.json`)
 
 ```json
@@ -186,6 +202,6 @@ A conforming runtime loop:
 
 | Target | Crate / Artifact | Conformance |
 |---|---|---|
-| Rust (ARM64/embedded) | `botpack-core`, `botpack-archive`, `botpack-affect` | 31 tests |
+| Rust (ARM64/embedded) | `botpack-core`, `botpack-archive`, `botpack-affect` | 33 tests |
 | WebAssembly | `botpack-wasm` → `botpack_wasm.wasm` | Node functional test |
 | Python | `botpack-python` → `botpack` module | Functional test + bit-identity |
