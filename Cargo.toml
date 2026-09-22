@@ -6,7 +6,7 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/robosoul/botpack"
+repository = "https://github.com/VirilePeak/robopersona"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -15,7 +15,7 @@ thiserror = "2"
 semver = { version = "1", features = ["serde"] }
 sha2 = "0.10"
 hex = "0.4"
-botpack-core = { path = "crates/botpack-core" }
+botpack-core = { version = "0.1.0", path = "crates/botpack-core" }
 
 [profile.release]
 lto = "thin"

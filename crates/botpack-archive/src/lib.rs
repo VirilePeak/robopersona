@@ -112,6 +112,9 @@ fn append<W: Write>(tar: &mut tar::Builder<W>, name: &str, data: &[u8]) -> std::
 #[derive(Debug)]
 pub struct ArchiveBuilder {
     manifest: Option<BotpackManifest>,
+    /// Raw manifest bytes to embed verbatim (byte-preserving round-trip).
+    /// If unset, the manifest is re-serialized pretty.
+    manifest_bytes: Option<Vec<u8>>,
     files: Vec<(String, Vec<u8>)>,
 }
 
@@ -120,14 +123,29 @@ impl ArchiveBuilder {
     pub fn new() -> Self {
         Self {
             manifest: None,
+            manifest_bytes: None,
             files: Vec::new(),
         }
     }
 
-    /// Sets the manifest (always written as the first entry).
+    /// Sets the manifest (always written as the first entry). Clears any raw
+    /// bytes set by [`Self::manifest_raw`] — the two setters are mutually
+    /// exclusive, the last one wins.
     pub fn manifest(mut self, manifest: BotpackManifest) -> Self {
         self.manifest = Some(manifest);
+        self.manifest_bytes = None;
         self
+    }
+
+    /// Embeds the manifest as the exact raw bytes given. The bytes are parsed
+    /// and validated first; the embedded blob is guaranteed to match the
+    /// validated struct (readers trust the blob, not a re-serialization).
+    pub fn manifest_raw(mut self, raw: Vec<u8>) -> Result<Self> {
+        let manifest: BotpackManifest = serde_json::from_slice(&raw)?;
+        manifest.validate()?;
+        self.manifest = Some(manifest);
+        self.manifest_bytes = Some(raw);
+        Ok(self)
     }
 
     /// Adds a payload file. Paths are validated (relative, no traversal).
@@ -154,11 +172,11 @@ impl ArchiveBuilder {
         let mut tar_buf = Vec::new();
         {
             let mut tar = tar::Builder::new(&mut tar_buf);
-            append(
-                &mut tar,
-                MANIFEST_ENTRY,
-                &serde_json::to_vec_pretty(manifest)?,
-            )?;
+            let manifest_json = match &self.manifest_bytes {
+                Some(raw) => raw.clone(),
+                None => serde_json::to_vec_pretty(manifest)?,
+            };
+            append(&mut tar, MANIFEST_ENTRY, &manifest_json)?;
             for (path, data) in &self.files {
                 append(&mut tar, path, data)?;
             }
@@ -198,6 +216,8 @@ impl Default for ArchiveBuilder {
 #[derive(Debug, Clone)]
 pub struct Archive {
     manifest: BotpackManifest,
+    /// Exact bytes of the `manifest.json` entry (source of truth on read).
+    manifest_raw_bytes: Vec<u8>,
     files: BTreeMap<String, Vec<u8>>,
 }
 
@@ -290,12 +310,22 @@ impl Archive {
             )));
         }
 
-        Ok(Self { manifest, files })
+        Ok(Self {
+            manifest,
+            manifest_raw_bytes: entries[0].1.clone(),
+            files,
+        })
     }
 
     /// The verified manifest.
     pub fn manifest(&self) -> &BotpackManifest {
         &self.manifest
+    }
+
+    /// Exact raw bytes of the `manifest.json` entry as stored in the
+    /// archive (byte-preserving round-trip source of truth).
+    pub fn manifest_raw(&self) -> &[u8] {
+        &self.manifest_raw_bytes
     }
 
     /// Borrowed payload file by path.
@@ -393,6 +423,39 @@ mod tests {
         let mut comp = Vec::new();
         zstd::stream::copy_encode(tar_buf.as_slice(), &mut comp, 3).unwrap();
         assert!(Archive::from_bytes(&comp).is_err());
+    }
+
+    #[test]
+    fn manifest_raw_byte_preservation() {
+        // Compact JSON in → the exact same bytes must come back out.
+        let raw = br#"{"format_version":"0.1.0","name":"atlas-caretaker","version":"0.1.0","persona":{"display_name":"Atlas Caretaker","languages":["en"]}}"#;
+        let bytes = ArchiveBuilder::new()
+            .manifest_raw(raw.to_vec())
+            .unwrap()
+            .add_file("x.txt", "y")
+            .unwrap()
+            .build()
+            .unwrap();
+        let a = Archive::from_bytes(&bytes).unwrap();
+        assert_eq!(a.manifest_raw(), raw);
+        assert_eq!(a.manifest().name.as_str(), "atlas-caretaker");
+    }
+
+    #[test]
+    fn manifest_setter_clears_raw_bytes() {
+        let raw = br#"{"format_version":"0.1.0","name":"atlas-caretaker","version":"0.1.0","persona":{"display_name":"Atlas Caretaker","languages":["en"]}}"#;
+        let bytes = ArchiveBuilder::new()
+            .manifest_raw(raw.to_vec())
+            .unwrap()
+            .manifest(manifest()) // last setter wins, must clear the blob
+            .add_file("x.txt", "y")
+            .unwrap()
+            .build()
+            .unwrap();
+        let a = Archive::from_bytes(&bytes).unwrap();
+        // Re-serialized pretty form, not the stale compact blob.
+        assert_ne!(a.manifest_raw(), raw);
+        assert!(a.manifest_raw().starts_with(b"{\n"));
     }
 
     #[test]

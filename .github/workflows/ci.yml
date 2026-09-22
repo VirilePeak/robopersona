@@ -70,7 +70,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: CLI end-to-end
         run: |
-          cargo build -p botpack-cli
+          cargo build -p botpack
           mkdir -p /tmp/bp-src
           cat > /tmp/bp-src/manifest.json <<'EOF'
           {"format_version":"0.1.0","name":"atlas-caretaker","version":"0.1.0","persona":{"display_name":"Atlas Caretaker","languages":["en"]}}
@@ -79,5 +79,5 @@ jobs:
           target/debug/botpack pack /tmp/bp-src -o /tmp/t.botpack
           target/debug/botpack verify /tmp/t.botpack
           target/debug/botpack unpack /tmp/t.botpack -o /tmp/bp-out
-          diff -r --exclude=manifest.json /tmp/bp-src /tmp/bp-out
+          diff -r /tmp/bp-src /tmp/bp-out
           echo "CLI E2E OK"

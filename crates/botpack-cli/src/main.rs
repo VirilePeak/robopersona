@@ -5,15 +5,16 @@
 //!   `manifest.json` plus payload files.
 //! - `unpack <file> -o <dir>`: verify and extract a `.botpack`.
 //! - `verify <file>`: verify integrity only, print the manifest summary.
-//! - `show <file>`: print the manifest JSON.
+//! - `show <file>`: print the manifest JSON exactly as stored in the
+//!   archive (byte-preserving; output is a valid pack input).
 
 #![deny(unsafe_code)]
 
 use std::fs;
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use botpack_archive::{Archive, ArchiveBuilder};
-use botpack_core::BotpackManifest;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -57,16 +58,6 @@ enum Command {
     },
 }
 
-fn read_manifest_from_dir(dir: &Path) -> Result<BotpackManifest, String> {
-    let path = dir.join("manifest.json");
-    let raw =
-        fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
-    let m: BotpackManifest =
-        serde_json::from_str(&raw).map_err(|e| format!("invalid manifest.json: {e}"))?;
-    m.validate().map_err(|e| e.to_string())?;
-    Ok(m)
-}
-
 fn collect_payload(dir: &Path) -> Result<Vec<(PathBuf, Vec<u8>)>, String> {
     let mut out = Vec::new();
     collect_recursive(dir, dir, &mut out)?;
@@ -101,8 +92,11 @@ fn collect_recursive(
 }
 
 fn cmd_pack(dir: &Path, out: &Path) -> Result<(), String> {
-    let manifest = read_manifest_from_dir(dir)?;
-    let mut builder = ArchiveBuilder::new().manifest(manifest);
+    let path = dir.join("manifest.json");
+    let raw = fs::read(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    let mut builder = ArchiveBuilder::new()
+        .manifest_raw(raw)
+        .map_err(|e| format!("invalid manifest.json: {e}"))?;
     for (rel, data) in collect_payload(dir)? {
         let name = rel.to_str().ok_or("non-utf8 payload path")?.to_owned();
         builder = builder.add_file(&name, data).map_err(|e| e.to_string())?;
@@ -121,6 +115,10 @@ fn open(file: &Path) -> Result<Archive, String> {
 fn cmd_unpack(file: &Path, out: &Path) -> Result<(), String> {
     let archive = open(file)?;
     fs::create_dir_all(out).map_err(|e| format!("cannot create {}: {e}", out.display()))?;
+    // Write the manifest verbatim, so unpacked dirs are byte-identical
+    // pack() inputs.
+    fs::write(out.join("manifest.json"), archive.manifest_raw())
+        .map_err(|e| format!("cannot write manifest.json: {e}"))?;
     for path in archive.file_paths() {
         let dest = out.join(path);
         if let Some(parent) = dest.parent() {
@@ -152,11 +150,13 @@ fn cmd_verify(file: &Path) -> Result<(), String> {
 
 fn cmd_show(file: &Path) -> Result<(), String> {
     let archive = open(file)?;
-    let json = archive
-        .manifest()
-        .to_json_pretty()
-        .map_err(|e| e.to_string())?;
-    println!("{json}");
+    // Stored bytes verbatim — no re-serialization, no extra newline.
+    // `botpack show f > manifest.json` must be a valid pack input.
+    let mut out = std::io::stdout();
+    out.write_all(archive.manifest_raw())
+        .map_err(|e| format!("cannot write to stdout: {e}"))?;
+    out.flush()
+        .map_err(|e| format!("cannot flush stdout: {e}"))?;
     Ok(())
 }
 

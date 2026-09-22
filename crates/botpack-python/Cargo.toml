@@ -4,11 +4,12 @@ description = "Python bindings for the botpack affect engine (pyo3)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+publish = false
 
 [lib]
 name = "botpack"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-botpack-affect = { path = "../botpack-affect" }
+botpack-affect = { version = "0.1.0", path = "../botpack-affect" }
 pyo3 = { version = "0.23", features = ["extension-module"] }

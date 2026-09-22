@@ -4,6 +4,10 @@ description = "Deterministic affect engine for robot personas (PAD model, ODE de
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["robotics", "affect", "determinism", "no-std", "wasm"]
+categories = ["science::robotics", "no-std", "wasm"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"], default-features = false }

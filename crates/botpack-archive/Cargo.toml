@@ -4,6 +4,10 @@ description = "Archive format for .botpack behavior packages (tar+zstd, SHA-256 
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["robotics", "archive", "integrity", "zstd"]
+categories = ["science::robotics", "compression"]
 
 [dependencies]
 botpack-core.workspace = true

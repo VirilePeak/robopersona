@@ -23,7 +23,7 @@ reproducibility. `.botpack` does:
 ## Quickstart (CLI)
 
 ```console
-$ cargo install --path crates/botpack-cli
+$ cargo install --path crates/botpack-cli   # after publish: cargo install botpack
 $ botpack pack ./my-persona -o my-persona.botpack
 $ botpack verify my-persona.botpack
 OK atlas-caretaker v0.1.0 (format 0.1.0) — 2 payload entries
@@ -40,7 +40,7 @@ $ botpack show my-persona.botpack
 | `botpack-affect` | `no_std` deterministic affect engine (PAD model, ODE decay) |
 | `botpack-wasm` | wasm-bindgen bindings for the affect engine |
 | `botpack-python` | pyo3 bindings (`botpack` module) |
-| `botpack-cli` | `botpack` binary: pack / unpack / verify / show |
+| `botpack` | `botpack` binary: pack / unpack / verify / show (crate dir: `crates/botpack-cli`) |
 
 ## Determinism example
 

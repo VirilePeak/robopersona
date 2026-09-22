@@ -1,17 +1,21 @@
 [package]
-name = "botpack-cli"
+name = "botpack"
 description = "CLI for the .botpack format: pack, unpack, verify"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
+readme = "../../README.md"
+keywords = ["robotics", "cli", "persona", "packaging"]
+categories = ["science::robotics", "command-line-utilities"]
 
 [[bin]]
 name = "botpack"
 path = "src/main.rs"
 
 [dependencies]
-botpack-core = { path = "../botpack-core" }
-botpack-archive = { path = "../botpack-archive" }
+botpack-core = { version = "0.1.0", path = "../botpack-core" }
+botpack-archive = { version = "0.1.0", path = "../botpack-archive" }
 serde_json.workspace = true
 semver.workspace = true
 clap = { version = "4", features = ["derive"] }

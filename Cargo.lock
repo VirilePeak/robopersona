@@ -85,6 +85,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "botpack"
+version = "0.1.0"
+dependencies = [
+ "botpack-archive",
+ "botpack-core",
+ "clap",
+ "semver",
+ "serde_json",
+]
+
+[[package]]
 name = "botpack-affect"
 version = "0.1.0"
 dependencies = [
@@ -108,17 +119,6 @@ dependencies = [
  "tempfile",
  "thiserror",
  "zstd",
-]
-
-[[package]]
-name = "botpack-cli"
-version = "0.1.0"
-dependencies = [
- "botpack-archive",
- "botpack-core",
- "clap",
- "semver",
- "serde_json",
 ]
 
 [[package]]
