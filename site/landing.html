@@ -1,0 +1,91 @@
+<section class="hero">
+<p class="eyebrow">Open format · draft {{spec_version}} · MIT OR Apache-2.0</p>
+<h1>Behavior packages for embodied&nbsp;AI.</h1>
+<p class="lead">A <code>.botpack</code> bundles a persona manifest, payload files and a SHA-256 index into one integrity-checked archive. Its affect engine is specified to return bit-identical IEEE-754 doubles in Rust, Python and WebAssembly for the same sequence of operations. CI checks all three runtimes against a published fixture.</p>
+<p class="actions">
+<a class="button primary" href="spec/">Read the spec</a>
+<a class="button" href="#quickstart">Quickstart</a>
+<a class="button" href="https://github.com/VirilePeak/robopersona">Source</a>
+</p>
+</section>
+
+<section id="format">
+<h2>One archive, fixed order</h2>
+<p>A <code>.botpack</code> is a zstd-compressed tar. The entry order is normative.</p>
+<table>
+<thead><tr><th>Position</th><th>Entry</th><th>Content</th></tr></thead>
+<tbody>
+<tr><td>first</td><td><code>manifest.json</code></td><td>Identity and persona (<a href="spec/#3-manifest-schema-manifestjson">§3</a>)</td></tr>
+<tr><td>middle</td><td>payload</td><td>Any files: prompts, configs, assets (<a href="spec/#5-path-safety">§5</a>)</td></tr>
+<tr><td>last</td><td><code>checksums.json</code></td><td>SHA-256 of every payload entry (<a href="spec/#4-integrity-checksumsjson">§4</a>)</td></tr>
+</tbody>
+</table>
+<ul>
+<li>Readers recompute every digest and reject the archive on a mismatch, a missing digest or an extra one.</li>
+<li>Readers reject path traversal, absolute paths and reserved names inside the payload.</li>
+<li>Readers reject a foreign major <code>format_version</code> and ignore unknown fields within a major.</li>
+<li>Ingested manifest bytes are stored verbatim, so unknown fields survive a round trip (<a href="spec/#34-byte-preservation-on-ingest">§3.4</a>).</li>
+</ul>
+</section>
+
+<section id="conformance">
+<h2>Check the determinism claim yourself</h2>
+<p>Reference scenario: baseline {{baseline}}, decay rate λ&nbsp;=&nbsp;{{decay_rate}}, max step {{max_step}}, one stimulus {{stimulus}}, then {{tick_count}} ticks of {{dt}}&nbsp;s. A conforming runtime ends in exactly these bits:</p>
+<pre class="bits"><code>valence    {{valence_bits}}
+arousal    {{arousal_bits}}
+dominance  {{dominance_bits}}</code></pre>
+<p>Each value is <code>f64::to_bits()</code> as 16 lowercase hex digits. The inputs are pinned as bit patterns too: {{dt}} is not exactly representable, so the fixture fixes <code>{{dt_bits}}</code>. Decimal renderings are non-normative.</p>
+<p>CI checks the same file from Rust (<code>f64::from_bits</code>), Python (<code>struct.unpack("&gt;d")</code>) and Node via wasm (<code>DataView</code>, big-endian). Fixture: <a href="conformance/affect-reference.json"><code>affect-reference.json</code></a>. Contract: <a href="spec/#7-determinism-contract">§7</a>.</p>
+{{demo}}
+</section>
+
+<section id="quickstart">
+<h2>Quickstart</h2>
+<p>The <a href="https://github.com/VirilePeak/robopersona/releases/latest">latest release</a> ships CLI binaries for macOS arm64 and Linux x86_64 plus a <code>SHA256SUMS</code> file.</p>
+<pre><code>BIN=botpack-aarch64-apple-darwin      # Linux: botpack-x86_64-unknown-linux-gnu
+curl -fLO https://github.com/VirilePeak/robopersona/releases/latest/download/$BIN
+curl -fLO https://github.com/VirilePeak/robopersona/releases/latest/download/SHA256SUMS
+shasum -a 256 -c SHA256SUMS --ignore-missing   # Linux: sha256sum -c SHA256SUMS --ignore-missing
+chmod +x $BIN &amp;&amp; mv $BIN botpack             # then put it on your PATH</code></pre>
+<p>The Linux binary needs glibc 2.34 or newer (Ubuntu 22.04+, Debian 12+). The macOS binary is not notarized: download it with <code>curl</code> as above. A copy downloaded in a browser is quarantined, and Gatekeeper refuses to run it. Or build from source:</p>
+<pre><code>cargo install --git https://github.com/VirilePeak/robopersona --locked botpack</code></pre>
+<p>A package is a directory with a <code>manifest.json</code>. Everything else in it becomes payload:</p>
+<pre><code>$ mkdir -p atlas/prompts
+$ printf '%s' '{"format_version":"{{spec_version}}","name":"atlas-caretaker","version":"0.1.0","persona":{"display_name":"Atlas Caretaker","languages":["en"]}}' &gt; atlas/manifest.json
+$ echo "Hello. I keep the aisles clear." &gt; atlas/greeting.txt
+$ echo "You are a careful warehouse robot." &gt; atlas/prompts/system.txt
+$ botpack pack ./atlas -o atlas.botpack
+packed ./atlas -&gt; atlas.botpack
+$ botpack verify atlas.botpack
+OK atlas-caretaker v0.1.0 (format {{spec_version}}) — 2 payload entries
+$ botpack unpack atlas.botpack -o ./out &amp;&amp; diff -r atlas out &amp;&amp; echo identical
+verified + extracted 2 entries -&gt; ./out
+identical</code></pre>
+</section>
+
+<section id="crates">
+<h2>Reference implementation</h2>
+<table>
+<thead><tr><th>Crate</th><th>Purpose</th></tr></thead>
+<tbody>
+<tr><td><code>botpack-core</code></td><td>Manifest schema, validation, JSON round-trip</td></tr>
+<tr><td><code>botpack-archive</code></td><td>Container: tar + zstd, SHA-256 index, path safety</td></tr>
+<tr><td><code>botpack-affect</code></td><td><code>no_std</code> affect engine: PAD vector, exponential decay, runtime loop</td></tr>
+<tr><td><code>botpack-wasm</code></td><td>wasm-bindgen bindings; the release <code>.wasm</code> is about 68&nbsp;kB</td></tr>
+<tr><td><code>botpack-python</code></td><td>pyo3 bindings, module <code>botpack</code></td></tr>
+<tr><td><code>botpack</code></td><td>CLI: <code>pack</code>, <code>unpack</code>, <code>verify</code>, <code>show</code></td></tr>
+</tbody>
+</table>
+<p>Crate version {{crate_version}}. Nothing is on crates.io or PyPI yet. The Python wheel builds from source with <code>maturin build -m crates/botpack-python/Cargo.toml</code>.</p>
+</section>
+
+<section id="status">
+<h2>Status</h2>
+<ul>
+<li>Format {{spec_version}} is a draft. Breaking changes are gated by the major version (<a href="spec/#9-versioning-policy">§9</a>).</li>
+<li><code>checksums.json</code> detects corruption, not tampering: whoever can rewrite the archive can rewrite the index. Signatures are not part of {{spec_version}}.</li>
+<li>One implementation so far: a Rust core with Python and wasm bindings. The fixture is there so that a second, independent implementation can check itself against it.</li>
+<li>Prebuilt binaries for macOS arm64 and Linux x86_64 only.</li>
+</ul>
+<p>Issues, questions and independent implementations: <a href="https://github.com/VirilePeak/robopersona/issues">GitHub issues</a>.</p>
+</section>

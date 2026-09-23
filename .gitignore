@@ -1,4 +1,5 @@
 /target
+/_site
 .venv
 crates/botpack-wasm/tests/node/pkg
 __pycache__/

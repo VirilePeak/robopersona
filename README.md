@@ -6,15 +6,19 @@ SHA-256 integrity index into one verifiable archive — with a
 **deterministic affect engine** whose outputs are bit-identical across
 Rust, Python, and WebAssembly.
 
+Website: <https://virilepeak.github.io/robopersona/> — rendered spec,
+conformance fixture, and an in-browser check of the released wasm build.
+
 ## Why
 
 Existing formats are either infrastructure (ROS2 packages) or LLM-only
 (character cards) — none carry verified state, safety bounds, and
 reproducibility. `.botpack` does:
 
-- **Determinism contract:** identical operation sequences produce
-  byte-identical IEEE-754 doubles on every platform. Verified:
-  Rust (ARM64) ≡ Python (pyo3) ≡ JavaScript (wasm-bindgen/Node).
+- **Determinism contract:** identical operation sequences must produce
+  bit-identical IEEE-754 doubles on every platform. CI checks Rust,
+  Python (pyo3) and JavaScript (wasm-bindgen/Node) against
+  [`conformance/affect-reference.json`](conformance/affect-reference.json).
 - **Safety by construction:** invalid states are unrepresentable —
   validated configs, clamped PAD vectors, rejected negative durations.
 - **Integrity:** every payload entry is digest-verified on read;
@@ -22,8 +26,12 @@ reproducibility. `.botpack` does:
 
 ## Quickstart (CLI)
 
+Prebuilt binaries (macOS arm64, Linux x86_64 with glibc ≥ 2.34) and
+`SHA256SUMS` are on the [latest release](https://github.com/VirilePeak/robopersona/releases/latest).
+Or build from source:
+
 ```console
-$ cargo install --path crates/botpack-cli   # after publish: cargo install botpack
+$ cargo install --git https://github.com/VirilePeak/robopersona --locked botpack
 $ botpack pack ./my-persona -o my-persona.botpack
 $ botpack verify my-persona.botpack
 OK atlas-caretaker v0.1.0 (format 0.1.0) — 2 payload entries
