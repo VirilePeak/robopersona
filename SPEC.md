@@ -167,7 +167,11 @@ s' = baseline + (s − baseline) · exp(−λ·dt)
    (range reduction + 13 Taylor terms + exponent-field scaling) and
    pure-Rust `sqrt`/`round`/`floor` (libm), never platform libm.
    *Verified:* Rust (ARM64 macOS) ≡ Python (pyo3 extension) ≡ JavaScript
-   (wasm-bindgen, Node) — byte-equal float64s.
+   (wasm-bindgen, Node) — byte-equal float64s. The reference scenario's
+   normative bit patterns live in `conformance/affect-reference.json`
+   (`*_bits` fields are `f64::to_bits()` as 16 lowercase hex digits;
+   decimal renderings in that file are non-normative and MUST NOT be
+   parsed back into floats).
 2. **Replay:** Identical event sequences replayed with identical `advance`
    chunking are bit-identical.
 3. **Chunking tolerance:** Different `advance` chunkings of the same event
@@ -202,6 +206,6 @@ A conforming runtime loop:
 
 | Target | Crate / Artifact | Conformance |
 |---|---|---|
-| Rust (ARM64/embedded) | `botpack-core`, `botpack-archive`, `botpack-affect` | 33 tests |
+| Rust (ARM64/embedded) | `botpack-core`, `botpack-archive`, `botpack-affect` | 34 tests |
 | WebAssembly | `botpack-wasm` → `botpack_wasm.wasm` | Node functional test |
-| Python | `botpack-python` → `botpack` module | Functional test + bit-identity |
+| Python | `botpack-python` → `botpack` module | `conformance/check_python.py` |

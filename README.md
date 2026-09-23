@@ -45,12 +45,15 @@ $ botpack show my-persona.botpack
 ## Determinism example
 
 The same scenario — baseline `(0.1, 0.2, 0.0)`, λ=0.5, one stimulus,
-ten 1.7 s ticks — produces identical bits in all three runtimes:
+ten 1.7 s ticks — produces identical bits in all three runtimes.
+Normative values are the `*_bits` fields in
+[`conformance/affect-reference.json`](conformance/affect-reference.json)
+(`f64::to_bits()` as 16 lowercase hex digits). The decimals below are a
+non-normative rendering only — `1.7` is not exactly representable:
 
 ```text
-Rust:   (0.1000610405107032, 0.19993895948929682, 6.104051070319337e-5)
-Python: (0.1000610405107032, 0.19993895948929682, 6.104051070319337e-05)
-JS:     (0.1000610405107032, 0.19993895948929682, 0.00006104051070319337)
+3fb99d99b098e231  3fc997998e19f54f  3f10005bfd225a03
+(0.1000610405107032, 0.19993895948929682, 6.104051070319337e-5)
 ```
 
 This is achieved by a fixed-budget `exp(−x)` implementation (range
@@ -65,7 +68,8 @@ is enforced by and tested against this reference implementation.
 ## Status
 
 Crate 0.1.1 — format spec still 0.1.0 (draft), reference implementation,
-33 tests green, clippy-clean, wasm32 + Python + Node verified. Crates are
+34 tests green, clippy-clean, wasm32 + Python + Node verified against
+`conformance/affect-reference.json`. Crates are
 not published to crates.io yet.
 
 ## License

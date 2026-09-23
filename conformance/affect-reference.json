@@ -1,0 +1,45 @@
+{
+  "$schema_note": "Conformance fixture for the botpack-affect determinism contract (SPEC §7). Normative values are the 16-char lowercase hex strings, each the exact f64::to_bits() bit pattern. Decimal strings are NON-NORMATIVE renderings for human reading only — never parse them back.",
+  "fixture_version": "1",
+  "scenario": {
+    "description": "One AffectEngine run: construct from bit patterns, apply one stimulus, ten ticks of 1.7 s.",
+    "config": {
+      "baseline": {
+        "valence_bits": "3fb999999999999a",
+        "arousal_bits": "3fc999999999999a",
+        "dominance_bits": "0000000000000000",
+        "decimal_non_normative": "(0.1, 0.2, 0.0)"
+      },
+      "decay_rate_bits": "3fe0000000000000",
+      "decay_rate_decimal_non_normative": "0.5",
+      "mood_tau_bits": "404e000000000000",
+      "mood_tau_decimal_non_normative": "60.0",
+      "max_step_bits": "3fd3333333333333",
+      "max_step_decimal_non_normative": "0.3"
+    },
+    "stimulus": {
+      "valence_bits": "3feccccccccccccd",
+      "arousal_bits": "bfd3333333333333",
+      "dominance_bits": "3fe3333333333333",
+      "decimal_non_normative": "(0.9, -0.3, 0.6)"
+    },
+    "tick": {
+      "dt_bits": "3ffb333333333333",
+      "dt_decimal_non_normative": "1.7",
+      "dt_note": "1.7 is NOT exactly representable as f64; the bit pattern above is the contract.",
+      "count": 10
+    }
+  },
+  "expected_state": {
+    "valence_bits": "3fb99d99b098e231",
+    "arousal_bits": "3fc997998e19f54f",
+    "dominance_bits": "3f10005bfd225a03",
+    "decimal_non_normative": "(0.1000610405107032, 0.19993895948929682, 6.104051070319337e-5)"
+  },
+  "provenance": {
+    "note": "The expected bit patterns were produced by an actual AffectEngine run of the Rust reference implementation (botpack-affect), not by decoding decimal literals from the README. The README decimals match these bits only as a cross-check and are not the source of truth.",
+    "rustc": "rustc 1.98.1",
+    "crate_version": "0.1.1",
+    "date": "2026-09-23"
+  }
+}

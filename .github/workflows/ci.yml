@@ -54,16 +54,37 @@ jobs:
           pip install maturin
           maturin build -m crates/botpack-python/Cargo.toml -o dist
           pip install dist/*.whl
-          python -c "
-          import botpack, struct
-          e = botpack.AffectEngine(botpack.AffectConfig(botpack.AffectVector(0.1,0.2,0.0), 0.5, 60.0, 0.3))
-          e.apply_stimulus(botpack.AffectVector(0.9,-0.3,0.6))
-          for _ in range(10): e.tick(1.7)
-          s = e.state().as_tuple()
-          expected = (0.1000610405107032, 0.19993895948929682, 6.104051070319337e-5)
-          assert struct.pack('3d', *s) == struct.pack('3d', *expected), s
-          print('PYTHON DETERMINISM OK:', s)
-          "
+          python conformance/check_python.py
+
+  node:
+    # Pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19.
+    # wasm-bindgen CLI must match the crate version in Cargo.lock.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install wasm-bindgen CLI 0.2.128
+        run: |
+          set -euo pipefail
+          curl -fsSL -o wasm-bindgen.tar.gz \
+            https://github.com/rustwasm/wasm-bindgen/releases/download/0.2.128/wasm-bindgen-0.2.128-x86_64-unknown-linux-musl.tar.gz
+          echo "b51f0208fdff83515a787bd8ab9ac5865ed84dabb66d0c709957bb59793c645f  wasm-bindgen.tar.gz" | sha256sum -c -
+          mkdir wbg && tar xzf wasm-bindgen.tar.gz -C wbg
+          WBG="$(find wbg -type f -name wasm-bindgen -print -quit)"
+          test -x "$WBG" || { echo "wasm-bindgen not found in tarball"; exit 1; }
+          echo "$(dirname "$WBG")" >> "$GITHUB_PATH"
+      - name: Build node bindings + conformance
+        run: |
+          cargo build -p botpack-wasm --target wasm32-unknown-unknown --release
+          wasm-bindgen --target nodejs --out-dir crates/botpack-wasm/tests/node/pkg \
+            target/wasm32-unknown-unknown/release/botpack_wasm.wasm
+          node crates/botpack-wasm/tests/node/test.js
 
   cli:
     # Pinned: ubuntu-latest migrates to Ubuntu 26 on 2026-10-19.

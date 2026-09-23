@@ -1,12 +1,29 @@
 // Functional + determinism test for botpack_wasm (Node target).
-// Must match the Rust/Python reference run bit-for-bit:
-//   (0.1000610405107032, 0.19993895948929682, 6.104051070319337e-5)
+// The cross-runtime oracle is conformance/affect-reference.json: *_bits
+// fields are the f64::to_bits() patterns (16 lowercase hex digits, integer
+// value / big-endian digit order). Decimal renderings are not parsed.
+const fs = require('fs');
+const path = require('path');
 const wasm = require('./pkg/botpack_wasm.js');
+const fx = JSON.parse(fs.readFileSync(
+  path.join(__dirname, '../../../../conformance/affect-reference.json'), 'utf8'));
 
-const bits = (x) => {
-  const f = new Float64Array(1); f[0] = x;
-  return [...new Uint8Array(f.buffer)].map(b => b.toString(16).padStart(2, '0')).join('');
-};
+// Hex is the u64 bit pattern in digit order, matching Rust `{:016x}` of to_bits().
+function fromBits(hex) {
+  if (!/^[0-9a-f]{16}$/.test(hex)) throw new Error('bad bit pattern: ' + hex);
+  const buf = new ArrayBuffer(8);
+  const view = new DataView(buf);
+  view.setUint32(0, parseInt(hex.slice(0, 8), 16), false);
+  view.setUint32(4, parseInt(hex.slice(8, 16), 16), false);
+  return view.getFloat64(0, false);
+}
+function toBits(x) {
+  const buf = new ArrayBuffer(8);
+  const view = new DataView(buf);
+  view.setFloat64(0, x, false);
+  return view.getUint32(0, false).toString(16).padStart(8, '0')
+    + view.getUint32(4, false).toString(16).padStart(8, '0');
+}
 
 let failures = 0;
 const check = (name, cond, detail) => {
@@ -36,26 +53,38 @@ let rejected = false;
 try { eng.tick(-1.0); } catch (e) { rejected = true; }
 check('negative dt rejected', rejected);
 
-// 3. Determinism run — same scenario as Rust/Python
+// 3. Determinism run — inputs reconstructed from fixture bit patterns.
+const sc = fx.scenario;
 const run = () => {
   const e = new wasm.JsAffectEngine({
-    baseline: { valence: 0.1, arousal: 0.2, dominance: 0.0 },
-    decay_rate: 0.5, mood_tau: 60.0, max_step: 0.3,
+    baseline: {
+      valence: fromBits(sc.config.baseline.valence_bits),
+      arousal: fromBits(sc.config.baseline.arousal_bits),
+      dominance: fromBits(sc.config.baseline.dominance_bits),
+    },
+    decay_rate: fromBits(sc.config.decay_rate_bits),
+    mood_tau: fromBits(sc.config.mood_tau_bits),
+    max_step: fromBits(sc.config.max_step_bits),
   });
-  e.applyStimulus({ valence: 0.9, arousal: -0.3, dominance: 0.6 });
-  for (let i = 0; i < 10; i++) e.tick(1.7);
+  e.applyStimulus({
+    valence: fromBits(sc.stimulus.valence_bits),
+    arousal: fromBits(sc.stimulus.arousal_bits),
+    dominance: fromBits(sc.stimulus.dominance_bits),
+  });
+  const dt = fromBits(sc.tick.dt_bits);
+  for (let i = 0; i < sc.tick.count; i++) e.tick(dt);
   return e.getState();
 };
 const a = run(), b = run();
-check('two runs bit-identical', bits(a.valence) === bits(b.valence)
-  && bits(a.arousal) === bits(b.arousal) && bits(a.dominance) === bits(b.dominance));
+check('two runs bit-identical', toBits(a.valence) === toBits(b.valence)
+  && toBits(a.arousal) === toBits(b.arousal) && toBits(a.dominance) === toBits(b.dominance));
 
-const expected = { valence: 0.1000610405107032, arousal: 0.19993895948929682, dominance: 6.104051070319337e-5 };
-check('matches Rust/Python reference bits',
-  bits(a.valence) === bits(expected.valence)
-  && bits(a.arousal) === bits(expected.arousal)
-  && bits(a.dominance) === bits(expected.dominance),
-  `got (${a.valence}, ${a.arousal}, ${a.dominance})`);
+const exp = fx.expected_state;
+check('matches conformance fixture bits',
+  toBits(a.valence) === exp.valence_bits
+  && toBits(a.arousal) === exp.arousal_bits
+  && toBits(a.dominance) === exp.dominance_bits,
+  `got ${toBits(a.valence)} ${toBits(a.arousal)} ${toBits(a.dominance)}`);
 
 // 4. Elapsed bookkeeping
 const e2 = new wasm.JsAffectEngine(cfg);
