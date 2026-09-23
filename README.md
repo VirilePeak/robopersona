@@ -6,8 +6,8 @@ SHA-256 integrity index into one verifiable archive — with a
 **deterministic affect engine** whose outputs are bit-identical across
 Rust, Python, and WebAssembly.
 
-Website: <https://virilepeak.github.io/robopersona/> — rendered spec,
-conformance fixture, and an in-browser check of the released wasm build.
+Website: <https://robosoul.de> — rendered spec, conformance fixture, and an
+in-browser check of the released wasm build.
 
 ## Why
 

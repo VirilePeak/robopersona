@@ -322,6 +322,9 @@ def main() -> None:
 
     # Static assets.
     shutil.copy2(SITE / "style.css", out / "style.css")
+    # Custom domain for GitHub Pages: exactly one line, no scheme. The Pages
+    # setting was made via API; without this file a re-deploy can drop it.
+    (out / "CNAME").write_text("robosoul.de\n", encoding="utf-8")
     (out / "conformance").mkdir()
     shutil.copy2(fixture_path, out / "conformance" / "affect-reference.json")
     if wasm_files:
